@@ -1,17 +1,4 @@
-"""Alpha-Beta با prior وزن‌دهی‌شده به‌صورت تطبیقی (KL-regularized).
-
-فرمول ترکیب:
-    σ = std({score(a) : a ∈ candidates})
-    λ = τ · σ
-    combined(a) = score(a) + λ · log(prior(a))
-
-λ از پراکندگی امتیازهای جستجو در همان موقعیت محاسبه می‌شود، نه از
-یک وزن ثابت. این همان ایده‌ی KL-regularized policy optimization است:
-    π ∝ prior · exp(Q / λ)
-که در آن λ نقش دما را بازی می‌کند. انتخاب λ = τ·σ به این معناست که
-«یک انحراف معیار اختلاف در امتیاز، معادل e برابر اختلاف در prior است»
-— یک انتخاب بی‌بعد که با داده‌ی هر موقعیت خودش را تنظیم می‌کند.
-"""
+"""Alpha-Beta با prior تطبیقی (KL-regularized) + mate detection صریح."""
 import sys, os, math
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _root not in sys.path:
@@ -22,10 +9,10 @@ import chess
 from .evaluate import eval_negamax, MATE
 from .model_io import get_policy
 
-# τ دمای بی‌بعد KL regularization. ۱.۰ = مقیاس طبیعی.
 TEMPERATURE_TAU = 1.0
-# جریمه‌ی تکرار برای جلوگیری از shuffle.
 REPETITION_PENALTY = 30
+MATE_THRESHOLD = MATE - 1000   # هر score ≥ 99,000 یعنی مات در درخت
+LAM_CAP = 500.0                # سقف λ برای جلوگیری از فوران در موقعیت‌های مرزی
 
 
 def quiescence(board, alpha, beta, ply, net, seen):
@@ -37,7 +24,8 @@ def quiescence(board, alpha, beta, ply, net, seen):
         return 0
 
     key = board._transposition_key()
-    stand = eval_negamax(board) - REPETITION_PENALTY * seen.get(key, 0)
+    # quiescence سریع: بدون mobility، بدون king safety
+    stand = eval_negamax(board, full=False) - REPETITION_PENALTY * seen.get(key, 0)
     if stand >= beta:
         return beta
     if stand > alpha:
@@ -96,11 +84,10 @@ def alpha_beta(board, depth, alpha, beta, ply, net, seen):
 
 
 def search_root(board, net, depth=3, top_k=8, tau=TEMPERATURE_TAU):
-    """Alpha-Beta با prior وزن‌دهی‌شده به‌صورت تطبیقی.
+    """Alpha-Beta با mate detection + adaptive KL-regularized prior.
 
-    Returns:
-        (best_move, best_combined, info)
-        info: list of (move, score, prior, combined, lam)
+    Returns: (best_move, best_combined, info)
+    info: list of (move, score, prior, combined, lam)
     """
     if board.is_game_over():
         return None, eval_negamax(board), []
@@ -113,11 +100,8 @@ def search_root(board, net, depth=3, top_k=8, tau=TEMPERATURE_TAU):
     if not moves:
         return None, eval_negamax(board), []
 
-    # full-window در root: به همه‌ی امتیازها نیاز داریم تا σ را حساب کنیم.
-    # (بدون alpha-beta pruning در root — کمی کندتر، ولی تنها راه درست.)
     seen = {board._transposition_key(): 1}
-    raw_scores = []
-    priors = []
+    raw_scores, priors = [], []
 
     for move in moves:
         board.push(move)
@@ -131,15 +115,24 @@ def search_root(board, net, depth=3, top_k=8, tau=TEMPERATURE_TAU):
         raw_scores.append(score)
         priors.append(max(policy.get(move, 1e-9), 1e-12))
 
-    # ─── محاسبه‌ی λ تطبیقی از داده‌ی همین موقعیت ───
     scores_arr = np.array(raw_scores, dtype=np.float64)
+
+    # ─── تشخیص مات: دسته‌ی جدا، prior نقشی ندارد ───
+    if np.any(np.abs(scores_arr) >= MATE_THRESHOLD):
+        best_idx = int(np.argmax(scores_arr))   # بهترین مات (یا کندترین باخت)
+        best_move = moves[best_idx]
+        best_combined = float(scores_arr[best_idx])
+        info = [(m, s, priors[i], s, 0.0)
+                for i, (m, s) in enumerate(zip(moves, raw_scores))]
+        return best_move, best_combined, info
+
+    # ─── حالت عادی: λ تطبیقی از داده‌ی همین موقعیت ───
     sigma = float(np.std(scores_arr)) if len(scores_arr) > 1 else 0.0
-    lam = max(tau * sigma, 1.0)  # کف ۱ cp برای جلوگیری از lam=0
+    lam = min(max(tau * sigma, 1.0), LAM_CAP)   # کف ۱، سقف ۵۰۰
 
     info = []
     best_combined = -MATE - 1.0
     best_move = None
-
     for move, score, prior in zip(moves, raw_scores, priors):
         log_bonus = lam * math.log(prior)
         combined = score + log_bonus
