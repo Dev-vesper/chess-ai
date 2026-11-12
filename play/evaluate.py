@@ -1,9 +1,4 @@
-"""ارزیابی ایستا با material + piece-square tables."""
-import sys, os
-_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _root not in sys.path:
-    sys.path.insert(0, _root)
-
+"""ارزیابی ایستا با material + PST + hanging pieces + king safety."""
 import chess
 
 MATE = 100_000
@@ -17,7 +12,7 @@ PIECE_VALUES = {
     chess.KING:   20_000,
 }
 
-# PST ساده (از دید سفید). برای سیاه با square_mirror.
+# PST از دید سفید. برای سیاه با square_mirror.
 PST = {
     chess.PAWN: [
           0,  0,  0,  0,  0,  0,  0,  0,
@@ -94,12 +89,37 @@ def eval_white(board):
     return score
 
 
+def _hanging_penalty(board):
+    """مجموع ارزش مهره‌های hanging (از دید سفید)."""
+    s = 0
+    for pt, base in PIECE_VALUES.items():
+        if pt == chess.KING:
+            continue
+        for sq in board.pieces(pt, chess.WHITE):
+            if (board.is_attacked_by(chess.BLACK, sq)
+                    and not board.is_attacked_by(chess.WHITE, sq)):
+                s -= base // 3
+        for sq in board.pieces(pt, chess.BLACK):
+            if (board.is_attacked_by(chess.WHITE, sq)
+                    and not board.is_attacked_by(chess.BLACK, sq)):
+                s += base // 3
+    return s
+
+
 def eval_negamax(board):
     """نمره از دید بازیکن جاری (+ = بهتر)."""
     if board.is_checkmate():
         return -MATE
     if (board.is_stalemate() or board.is_insufficient_material()
-            or board.is_seventyfive_moves() or board.is_fivefold_repetition()):
+            or board.is_seventyfive_moves() or board.is_fivefold_repetition()
+            or board.can_claim_threefold_repetition()
+            or board.can_claim_fifty_moves()):
         return 0
+
     s = eval_white(board)
+    s += _hanging_penalty(board)
+
+    if board.is_check():
+        s += 30 if board.turn == chess.WHITE else -30
+
     return s if board.turn == chess.WHITE else -s

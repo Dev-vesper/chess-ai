@@ -17,6 +17,11 @@ def print_board(board):
     print()
 
 
+def is_draw_claimable(board):
+    return (board.can_claim_threefold_repetition()
+            or board.can_claim_fifty_moves())
+
+
 def pick_human_move(board):
     while True:
         s = input("Your move (SAN or UCI, e.g. 'e4' or 'e2e4'): ").strip()
@@ -39,8 +44,12 @@ def play_game(net, human_color, depth, top_k, max_plies=300):
     print_board(board)
 
     for ply in range(max_plies):
-        if board.is_game_over():
-            print(f"Game over: {board.result()} ({board.outcome().termination.name})")
+        if board.is_game_over() or is_draw_claimable(board):
+            if board.is_game_over():
+                reason = board.outcome().termination.name
+            else:
+                reason = "claimable draw (3-fold/50-move)"
+            print(f"Game over: {board.result()} ({reason})")
             return board
 
         if board.turn == human_color:
@@ -54,10 +63,9 @@ def play_game(net, human_color, depth, top_k, max_plies=300):
             if move is None:
                 print(f"No legal move. score={score}")
                 return board
-            # top-3 نمایش
-            info_sorted = sorted(info, key=lambda x: -x[1])[:3]
+            info_sorted = sorted(info, key=lambda x: -x[3])[:3]
             print(f"AI plays: {board.san(move)} | eval={score} "
-                  f"| top3: {[(m.uci(), round(s), round(p,3)) for m,s,p in info_sorted]}")
+                  f"| top3: {[(m.uci(), round(s), round(p,3)) for m,s,p,_ in info_sorted]}")
 
         board.push(move)
         print_board(board)
@@ -70,8 +78,12 @@ def self_play(net, depth, top_k, games=1):
         print(f"\n=== Self-play game {g+1}/{games} ===")
         board = chess.Board()
         for ply in range(300):
-            if board.is_game_over():
-                print(f"Result: {board.result()} ({board.outcome().termination.name})")
+            if board.is_game_over() or is_draw_claimable(board):
+                if board.is_game_over():
+                    reason = board.outcome().termination.name
+                else:
+                    reason = "claimable draw (3-fold/50-move)"
+                print(f"Result: {board.result()} ({reason})")
                 print(f"Plys: {ply}")
                 break
             move, score, _ = search_root(board, net, depth=depth, top_k=top_k)
@@ -87,11 +99,10 @@ def main():
     ap.add_argument("--model", default="model.npz")
     ap.add_argument("--depth", type=int, default=3)
     ap.add_argument("--top-k", type=int, default=8)
-    ap.add_argument("--human", choices=["white", "black"], default=None,
-                    help="بازی با انسان. اگر نباشه، self-play.")
+    ap.add_argument("--human", choices=["white", "black"], default=None)
     ap.add_argument("--self-play", action="store_true")
     ap.add_argument("--games", type=int, default=1)
-    ap.add_argument("--fen", default=None, help="شروع از موقعیت مشخص")
+    ap.add_argument("--fen", default=None)
     a = ap.parse_args()
 
     net = load_model(a.model)
@@ -103,8 +114,8 @@ def main():
         print_board(board)
         move, score, info = search_root(board, net, depth=a.depth, top_k=a.top_k)
         print(f"Best: {board.san(move) if move else 'None'} | eval={score}")
-        for m, s, p in sorted(info, key=lambda x: -x[1])[:5]:
-            print(f"  {m.uci():6s} score={s:+6d} prior={p:.3f}")
+        for m, s, p, c in sorted(info, key=lambda x: -x[3])[:5]:
+            print(f"  {m.uci():6s} score={s:+6d} prior={p:.3f} combined={c:+6d}")
         return
 
     if a.human:
