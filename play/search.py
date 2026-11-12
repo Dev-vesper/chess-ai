@@ -1,14 +1,30 @@
-"""Alpha-Beta با model prior در eval برگ‌ها + quiescence."""
-import sys, os
+"""Alpha-Beta با prior وزن‌دهی‌شده به‌صورت تطبیقی (KL-regularized).
+
+فرمول ترکیب:
+    σ = std({score(a) : a ∈ candidates})
+    λ = τ · σ
+    combined(a) = score(a) + λ · log(prior(a))
+
+λ از پراکندگی امتیازهای جستجو در همان موقعیت محاسبه می‌شود، نه از
+یک وزن ثابت. این همان ایده‌ی KL-regularized policy optimization است:
+    π ∝ prior · exp(Q / λ)
+که در آن λ نقش دما را بازی می‌کند. انتخاب λ = τ·σ به این معناست که
+«یک انحراف معیار اختلاف در امتیاز، معادل e برابر اختلاف در prior است»
+— یک انتخاب بی‌بعد که با داده‌ی هر موقعیت خودش را تنظیم می‌کند.
+"""
+import sys, os, math
 _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _root not in sys.path:
     sys.path.insert(0, _root)
 
+import numpy as np
 import chess
 from .evaluate import eval_negamax, MATE
 from .model_io import get_policy
 
-MODEL_WEIGHT = 80
+# τ دمای بی‌بعد KL regularization. ۱.۰ = مقیاس طبیعی.
+TEMPERATURE_TAU = 1.0
+# جریمه‌ی تکرار برای جلوگیری از shuffle.
 REPETITION_PENALTY = 30
 
 
@@ -79,8 +95,13 @@ def alpha_beta(board, depth, alpha, beta, ply, net, seen):
     return alpha
 
 
-def search_root(board, net, depth=3, top_k=8):
-    """بهترین حرکت با model ordering + model bonus + alpha-beta."""
+def search_root(board, net, depth=3, top_k=8, tau=TEMPERATURE_TAU):
+    """Alpha-Beta با prior وزن‌دهی‌شده به‌صورت تطبیقی.
+
+    Returns:
+        (best_move, best_combined, info)
+        info: list of (move, score, prior, combined, lam)
+    """
     if board.is_game_over():
         return None, eval_negamax(board), []
 
@@ -89,35 +110,42 @@ def search_root(board, net, depth=3, top_k=8):
     moves.sort(key=lambda m: policy.get(m, 0.0), reverse=True)
     if top_k:
         moves = moves[:top_k]
+    if not moves:
+        return None, eval_negamax(board), []
 
-    n_legal = len(policy)
+    # full-window در root: به همه‌ی امتیازها نیاز داریم تا σ را حساب کنیم.
+    # (بدون alpha-beta pruning در root — کمی کندتر، ولی تنها راه درست.)
     seen = {board._transposition_key(): 1}
-    best_score = -MATE - 1
-    best_move = None
-    alpha = -MATE - 1
-    info = []
+    raw_scores = []
+    priors = []
 
     for move in moves:
         board.push(move)
         k = board._transposition_key()
         seen[k] = seen.get(k, 0) + 1
-        score = -alpha_beta(board, depth - 1, -MATE - 1, -alpha, 1, net, seen)
+        score = -alpha_beta(board, depth - 1, -MATE - 1, MATE + 1, 1, net, seen)
         seen[k] -= 1
         if seen[k] == 0:
             del seen[k]
         board.pop()
+        raw_scores.append(score)
+        priors.append(max(policy.get(move, 1e-9), 1e-12))
 
-        prior = policy.get(move, 0.0)
-        if n_legal > 1:
-            confidence = (prior - 1.0 / n_legal) / (1.0 - 1.0 / n_legal)
-        else:
-            confidence = 0.0
-        combined = score + int(MODEL_WEIGHT * confidence * 0.5)
+    # ─── محاسبه‌ی λ تطبیقی از داده‌ی همین موقعیت ───
+    scores_arr = np.array(raw_scores, dtype=np.float64)
+    sigma = float(np.std(scores_arr)) if len(scores_arr) > 1 else 0.0
+    lam = max(tau * sigma, 1.0)  # کف ۱ cp برای جلوگیری از lam=0
 
-        info.append((move, score, prior, combined))
-        if combined > best_score:
-            best_score = combined
+    info = []
+    best_combined = -MATE - 1.0
+    best_move = None
+
+    for move, score, prior in zip(moves, raw_scores, priors):
+        log_bonus = lam * math.log(prior)
+        combined = score + log_bonus
+        info.append((move, score, prior, combined, lam))
+        if combined > best_combined:
+            best_combined = combined
             best_move = move
-            alpha = max(alpha, score)
 
-    return best_move, best_score, info
+    return best_move, best_combined, info
