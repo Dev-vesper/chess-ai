@@ -1,6 +1,6 @@
 import numpy as np
-from chessnet import MLP, make_mask
-from build_dataset import N_FEATURES
+from policy.chessnet import MLP
+from policy.encoding import N_FEATURES, make_mask
 
 d = np.load("dataset.npz")
 n = 40

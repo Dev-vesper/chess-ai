@@ -1,13 +1,12 @@
 """Alpha-Beta با prior تطبیقی (KL-regularized) + mate detection صریح."""
-import sys, os, math
-_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _root not in sys.path:
-    sys.path.insert(0, _root)
+import math
 
 import numpy as np
 import chess
-from .evaluate import eval_negamax, MATE
-from .model_io import get_policy
+
+from engine.evaluate import eval_negamax
+from engine.terminal import MATE, is_search_draw
+from policy.inference import get_policy
 
 TEMPERATURE_TAU = 1.0
 REPETITION_PENALTY = 30
@@ -18,9 +17,7 @@ LAM_CAP = 500.0                # سقف λ برای جلوگیری از فورا
 def quiescence(board, alpha, beta, ply, net, seen):
     if board.is_checkmate():
         return -MATE + ply
-    if (board.is_stalemate() or board.is_insufficient_material()
-            or board.can_claim_threefold_repetition()
-            or board.can_claim_fifty_moves()):
+    if is_search_draw(board):
         return 0
 
     key = board._transposition_key()
@@ -56,9 +53,7 @@ def quiescence(board, alpha, beta, ply, net, seen):
 def alpha_beta(board, depth, alpha, beta, ply, net, seen):
     if board.is_checkmate():
         return -MATE + ply
-    if (board.is_stalemate() or board.is_insufficient_material()
-            or board.can_claim_threefold_repetition()
-            or board.can_claim_fifty_moves()):
+    if is_search_draw(board):
         return 0
     if depth == 0:
         return quiescence(board, alpha, beta, ply, net, seen)

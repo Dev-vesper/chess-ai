@@ -1,13 +1,7 @@
 import numpy as np
 
-N_OUT = 4096
+from policy.encoding import N_OUT
 
-def make_mask(L):
-    """L: (B, maxlen) اندیس حرکات قانونی با پد -1  ->  ماسک بولی (B, 4096)"""
-    mask = np.zeros((L.shape[0], N_OUT), dtype=bool)
-    r, c = np.nonzero(L >= 0)
-    mask[r, L[r, c]] = True
-    return mask
 
 class MLP:
     def __init__(self, n_in, n_hid, seed=0, dtype=np.float32):
@@ -18,6 +12,12 @@ class MLP:
             "W2": (rng.normal(0, 1, (n_hid, N_OUT)) * np.sqrt(1.0 / n_hid)).astype(dtype),
             "b2": np.zeros(N_OUT, dtype=dtype),
         }
+
+    @classmethod
+    def from_params(cls, params):
+        net = cls.__new__(cls)
+        net.params = params
+        return net
 
     def forward(self, X, mask, drop=0.0, rng=None):
         P = self.params
@@ -57,6 +57,7 @@ class MLP:
             g["W1"] = g["W1"] + wd * P["W1"]
             g["W2"] = g["W2"] + wd * P["W2"]
         return loss, g
+
 
 class Adam:
     def __init__(self, params, lr=1e-3, b1=0.9, b2=0.999, eps=1e-8):

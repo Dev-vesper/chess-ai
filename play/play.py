@@ -1,13 +1,10 @@
 """CLI برای بازی با مدل + Alpha-Beta (adaptive KL-regularized prior)."""
-import sys, os
-_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _root not in sys.path:
-    sys.path.insert(0, _root)
-
 import argparse
 import chess
-from play.model_io import load_model
-from play.search import search_root, TEMPERATURE_TAU
+
+from engine.search import search_root, TEMPERATURE_TAU
+from engine.terminal import is_claimable_draw
+from policy.inference import load_model
 
 
 def print_board(board):
@@ -15,11 +12,6 @@ def print_board(board):
     print(board)
     print(f"FEN: {board.fen()}")
     print()
-
-
-def is_draw_claimable(board):
-    return (board.can_claim_threefold_repetition()
-            or board.can_claim_fifty_moves())
 
 
 def pick_human_move(board):
@@ -44,7 +36,7 @@ def play_game(net, human_color, depth, top_k, tau, max_plies=300):
     print_board(board)
 
     for ply in range(max_plies):
-        if board.is_game_over() or is_draw_claimable(board):
+        if board.is_game_over() or is_claimable_draw(board):
             if board.is_game_over():
                 reason = board.outcome().termination.name
             else:
@@ -81,7 +73,7 @@ def self_play(net, depth, top_k, tau, games=1):
         print(f"\n=== Self-play game {g+1}/{games} (tau={tau}) ===")
         board = chess.Board()
         for ply in range(300):
-            if board.is_game_over() or is_draw_claimable(board):
+            if board.is_game_over() or is_claimable_draw(board):
                 if board.is_game_over():
                     reason = board.outcome().termination.name
                 else:

@@ -1,8 +1,8 @@
-import sys, glob, collections
+import sys, collections
 import chess.pgn
 
-def pgn_files(path):
-    return sorted(glob.glob(path + "/*.pgn")) if path.endswith("/") or not path.endswith(".pgn") else [path]
+from dataset.pgn import pgn_files
+
 
 def main(path):
     names = collections.Counter()
@@ -30,9 +30,11 @@ def main(path):
     print("games:", n_games, "| with parse errors:", n_errors, "| empty:", n_empty)
     print("\nTop names (your username should be near the top):")
     for k, v in names.most_common(8): print(f"  {v:4d}  {k}")
+
     print("\nVariants:", dict(variants))
     print("Results:", dict(results))
     print("Time controls (top 6):", timectl.most_common(6))
+
 
 if __name__ == "__main__":
     main(sys.argv[1])

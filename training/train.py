@@ -1,7 +1,7 @@
 import time, argparse
 import numpy as np
-from chessnet import MLP, Adam, make_mask
-from build_dataset import N_FEATURES
+from policy.chessnet import MLP, Adam
+from policy.encoding import N_FEATURES, make_mask
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--hidden", type=int, default=128)
@@ -15,6 +15,7 @@ ap.add_argument("--seed", type=int, default=0)
 ap.add_argument("--val_ratio", type=float, default=0.15,
                 help="نسبت موقعیت‌های val (بر اساس هش موقعیت)")
 ap.add_argument("--flush", type=int, default=1)
+ap.add_argument("--out", default="model.npz")
 a = ap.parse_args()
 
 TINY = np.finfo(np.float32).tiny
@@ -22,7 +23,7 @@ FLUSH_TH = 1e-30
 
 d = np.load("dataset.npz")
 X = d["X"].astype(np.float32); Y = d["Y"].astype(np.int64)
-G = d["G"]; L = d["L"].astype(np.int64); PLY = d["P"]
+L = d["L"].astype(np.int64); PLY = d["P"]
 POS_KEY = d["POS_KEY"]
 
 # ---------- تقسیم بر اساس هش موقعیت (بدون نشت) ----------
@@ -45,7 +46,7 @@ leak = len(val_keys & train_keys)
 print(f"train: {len(tr)} samples | val: {len(va)} samples")
 print(f"unique val positions: {len(val_keys)} | leakage (must be 0): {leak}")
 
-def evaluate(net, idx):
+def evaluate_dataset(net, idx):
     loss = top1 = top3 = 0.0
     early = np.zeros(2); late = np.zeros(2)
     for s in range(0, len(idx), 512):
@@ -92,7 +93,8 @@ best_vl, best_params, bad = 1e9, None, 0   # early stop بر اساس val loss (
 
 for ep in range(1, a.epochs + 1):
     t0 = time.time()
-    order = rng.permutation(tr) if (rng := np.random.default_rng(a.seed + ep)) else tr
+    rng = np.random.default_rng(a.seed + ep)
+    order = rng.permutation(tr)
     tot = 0.0; nb = 0
     for s in range(0, len(order), a.batch):
         b = order[s:s + a.batch]
@@ -104,7 +106,7 @@ for ep in range(1, a.epochs + 1):
         tot += loss; nb += 1
     t_train = time.time() - t0
 
-    vl, v1, v3, _, _ = evaluate(net, va)
+    vl, v1, v3, _, _ = evaluate_dataset(net, va)
     den_m, den_v = count_denormals(opt.m), count_denormals(opt.v)
     print(f"ep {ep:3d} | train {tot/nb:.3f} | val {vl:.3f} | "
           f"val top1 {v1:.3f} top3 {v3:.3f} | {t_train:.1f}s "
@@ -118,10 +120,10 @@ for ep in range(1, a.epochs + 1):
             print("early stop"); break
 
 net.params.update(best_params)
-tl, t1, t3, _, _ = evaluate(net, tr)
-vl, v1, v3, ve, vlate = evaluate(net, va)
+tl, t1, t3, _, _ = evaluate_dataset(net, tr)
+vl, v1, v3, ve, vlate = evaluate_dataset(net, va)
 print("\n=== نتیجه‌ی بهترین مدل (بر اساس val loss) ===")
 print(f"train: loss {tl:.3f} top1 {t1:.3f} top3 {t3:.3f}")
 print(f"val  : loss {vl:.3f} top1 {v1:.3f} top3 {v3:.3f}  "
       f"(opening ≤10: {ve:.3f} | later: {vlate:.3f})")
-np.savez("model.npz", **net.params)
+np.savez(a.out, **net.params)

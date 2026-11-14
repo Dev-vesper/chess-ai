@@ -1,7 +1,7 @@
 """Eval با دو فاز (mid/end) + mobility سریع + hanging + king safety."""
 import chess
 
-MATE = 100_000
+from engine.terminal import MATE, is_eval_draw
 
 PIECE_VALUES = {
     chess.PAWN: 100, chess.KNIGHT: 320, chess.BISHOP: 330,
@@ -165,10 +165,7 @@ def eval_white(board, full=True):
 def eval_negamax(board, full=True):
     if board.is_checkmate():
         return -MATE
-    if (board.is_stalemate() or board.is_insufficient_material()
-            or board.is_seventyfive_moves() or board.is_fivefold_repetition()
-            or board.can_claim_threefold_repetition()
-            or board.can_claim_fifty_moves()):
+    if is_eval_draw(board):
         return 0
     s = eval_white(board, full=full)
     if board.is_check():
