@@ -10,6 +10,10 @@ A framework-free chess move-prediction engine: a NumPy MLP trained on PGN games,
 
 </div>
 
+## Purpose
+
+This framework is meant solely for training on your own personal games. It learns your playing style from your PGN history, and the alpha-beta engine then plays using that learned style as its prior.
+
 ## How it works
 
 - **Features:** 805 board features (piece squares, castling, checks, hanging pieces, material, center control, en passant).
