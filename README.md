@@ -63,4 +63,45 @@ python -m play.play --self-play --depth 3 --games 1
 python -m play.play --human white --depth 3
 ```
 
+## CLI options
+
+### `play.play`
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--fen FEN` | — | Analyze one position instead of playing a game. |
+| `--depth N` | `3` | Alpha-beta search depth. |
+| `--top-k N` | `8` | Search only the top-N root moves by model prior. `0` disables truncation. |
+| `--tau X` | `1.0` | Prior strength: `λ = clamp(tau × std(root scores), 1, 500)`. Larger = model has more influence; smaller = search dominates. |
+| `--model PATH` | `model.npz` | Trained parameter file. |
+| `--human {white,black}` | — | Play interactively as the chosen side. |
+| `--self-play` | off | Let the engine play both sides. |
+| `--games N` | `1` | Number of self-play games. |
+
+### `dataset.build_dataset`
+
+| Argument | Default | Description |
+| --- | --- | --- |
+| `pgn` | required | PGN file or directory of PGN files. |
+| `--name NAME [NAME ...]` | required | Username(s) whose moves become training targets. |
+| `--out PATH` | `dataset.npz` | Output dataset file. |
+
+### `training.train`
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--hidden N` | `128` | Hidden-layer width. |
+| `--epochs N` | `40` | Maximum training epochs. |
+| `--batch N` | `64` | Batch size. |
+| `--lr X` | `1e-3` | Adam learning rate. |
+| `--drop X` | `0.5` | Dropout rate. |
+| `--wd X` | `1e-3` | Weight decay. |
+| `--patience N` | `5` | Early stop after N epochs without validation improvement. |
+| `--val_ratio X` | `0.15` | Fraction of positions (by Zobrist hash) held out for validation. |
+| `--seed N` | `0` | Random seed. |
+| `--flush N` | `1` | Flush tiny Adam moment values to zero (`1` on, `0` off). |
+| `--out PATH` | `model.npz` | Output model file. |
+
+`training.check_denormal` accepts `--model PATH` (default `model.npz`). `training.gradcheck` and `policy.diagnose_prior` take no flags, and `dataset.inspect_pgn` takes only a PGN path.
+
 All commands must be run from the repository root. The model is a move-prior for the search, not a standalone engine.
