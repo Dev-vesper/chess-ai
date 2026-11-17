@@ -148,10 +148,10 @@ def eval_white(board, full=True):
     score = 0
     for pt, base in PIECE_VALUES.items():
         for sq in board.pieces(pt, chess.WHITE):
-            score += base + int(mid_w * PST_MID[pt][sq] + end_w * PST_END[pt][sq])
-        for sq in board.pieces(pt, chess.BLACK):
             m = chess.square_mirror(sq)
-            score -= base + int(mid_w * PST_MID[pt][m] + end_w * PST_END[pt][m])
+            score += base + int(mid_w * PST_MID[pt][m] + end_w * PST_END[pt][m])
+        for sq in board.pieces(pt, chess.BLACK):
+            score -= base + int(mid_w * PST_MID[pt][sq] + end_w * PST_END[pt][sq])
 
     score += _hanging_penalty(board)
 
@@ -169,5 +169,5 @@ def eval_negamax(board, full=True):
         return 0
     s = eval_white(board, full=full)
     if board.is_check():
-        s += 30 if board.turn == chess.WHITE else -30
+        s += 30 if board.turn == chess.BLACK else -30
     return s if board.turn == chess.WHITE else -s

@@ -57,7 +57,7 @@ There are no root-level `.py` scripts and no `sys.path` manipulation; add new be
 - **Action space, 4096 = `from_square * 64 + to_square`** — promotion piece is not part of the index, so promotions collapse onto one index. `move_index` / `move_from_index` / `legal_indices` in `encoding.py` are the only index helpers.
 - **Side-to-move perspective** — `view_for_turn(board)` returns the board from the mover's view (Black positions are mirrored) plus a `mirrored` flag; `map_move(move, mirrored)` converts moves either way and preserves promotion. Use these instead of ad-hoc `board.mirror()` logic.
 - **Dataset columns**: `X` (uint8 features), `Y` (int16 move index), `G` (game id), `P` (fullmove number), `L` (int16 legal indices padded with -1), `POS_KEY` (uint64 Polyglot Zobrist hash of the model view).
-- **Validation split by position hash** — `training/train.py` assigns `POS_KEY % 100 < val_ratio*100` to validation, removes every validation key from training, and prints a leakage count that must stay 0.
+- **Validation split by game id** — `training/train.py` holds out `val_ratio` of games (seeded), removes every validation `POS_KEY` from training, and prints a leakage count that must stay 0.
 - **Model file** is a bare parameter dict (`W1`, `b1`, `W2`, `b2`). `policy.inference.load_model()` wraps it with `MLP.from_params()` (no re-init, no dtype conversion) and asserts `W1.shape[0] == N_FEATURES`.
 
 ## Engine semantics

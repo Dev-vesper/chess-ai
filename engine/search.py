@@ -20,17 +20,20 @@ def quiescence(board, alpha, beta, ply, net, seen):
     if is_search_draw(board):
         return 0
 
-    key = board._transposition_key()
-    # quiescence سریع: بدون mobility، بدون king safety
-    stand = eval_negamax(board, full=False) - REPETITION_PENALTY * seen.get(key, 0)
-    if stand >= beta:
-        return beta
-    if stand > alpha:
-        alpha = stand
-
     in_check = board.is_check()
-    if in_check and ply > 6:
-        return alpha
+    key = board._transposition_key()
+    penalty = REPETITION_PENALTY * max(seen.get(key, 0) - 1, 0)
+
+    if in_check:
+        if ply > 6:
+            return eval_negamax(board, full=False) - penalty
+    else:
+        # quiescence سریع: بدون mobility، بدون king safety
+        stand = eval_negamax(board, full=False) - penalty
+        if stand >= beta:
+            return beta
+        if stand > alpha:
+            alpha = stand
 
     for move in board.legal_moves:
         if not in_check and not (board.is_capture(move) or move.promotion):

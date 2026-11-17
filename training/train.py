@@ -13,7 +13,7 @@ ap.add_argument("--batch", type=int, default=64)
 ap.add_argument("--patience", type=int, default=5)
 ap.add_argument("--seed", type=int, default=0)
 ap.add_argument("--val_ratio", type=float, default=0.15,
-                help="نسبت موقعیت‌های val (بر اساس هش موقعیت)")
+                help="نسبت بازی‌های val (بر اساس game id)")
 ap.add_argument("--flush", type=int, default=1)
 ap.add_argument("--out", default="model.npz")
 a = ap.parse_args()
@@ -24,13 +24,15 @@ FLUSH_TH = 1e-30
 d = np.load("dataset.npz")
 X = d["X"].astype(np.float32); Y = d["Y"].astype(np.int64)
 L = d["L"].astype(np.int64); PLY = d["P"]
+G = d["G"]
 POS_KEY = d["POS_KEY"]
 
-# ---------- تقسیم بر اساس هش موقعیت (بدون نشت) ----------
-# hash(position) % 100 < val_ratio*100  →  val
-# بقیه  →  train
-val_thresh = int(a.val_ratio * 100)
-is_val = (POS_KEY % np.uint64(100)) < np.uint64(val_thresh)
+# ---------- تقسیم بر اساس game (بدون نشت) ----------
+rng_split = np.random.default_rng(a.seed)
+games = np.unique(G)
+n_val = max(1, int(round(len(games) * a.val_ratio)))
+val_games = set(rng_split.permutation(games)[:n_val].tolist())
+is_val = np.isin(G, list(val_games))
 
 # حذف قطعی: هر موقعیتی که در val است، از train حذف می‌شود
 val_keys = set(POS_KEY[is_val].tolist())

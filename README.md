@@ -44,7 +44,7 @@ This writes `dataset.npz` with features (`X`), move targets (`Y`), legal-move li
 python -m training.train --hidden 128 --epochs 40 --drop 0.5 --wd 1e-3 --lr 1e-3
 ```
 
-Training saves `model.npz` from the best validation-loss epoch. Validation is split by position hash with zero leakage. Use `--out` to write elsewhere, and run the gradient check with:
+Training saves `model.npz` from the best validation-loss epoch. Validation is split by game id (with exact-position de-duplication) with zero leakage. Use `--out` to write elsewhere, and run the gradient check with:
 
 ```bash
 python -m training.gradcheck
@@ -97,7 +97,7 @@ python -m play.play --human white --depth 3
 | `--drop X` | `0.5` | Dropout rate. |
 | `--wd X` | `1e-3` | Weight decay. |
 | `--patience N` | `5` | Early stop after N epochs without validation improvement. |
-| `--val_ratio X` | `0.15` | Fraction of positions (by Zobrist hash) held out for validation. |
+| `--val_ratio X` | `0.15` | Fraction of games held out for validation. |
 | `--seed N` | `0` | Random seed. |
 | `--flush N` | `1` | Flush tiny Adam moment values to zero (`1` on, `0` off). |
 | `--out PATH` | `model.npz` | Output model file. |

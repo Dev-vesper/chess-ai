@@ -25,4 +25,10 @@ def get_policy(net, board):
     x = encode(view).astype(np.float32).reshape(1, -1)
     L = np.array([legal_indices(view)], dtype=np.int64)
     p = net.predict(x, make_mask(L))[0]
-    return {map_move(mv, mirrored): float(p[move_index(mv)]) for mv in legal}
+
+    counts = {}
+    for mv in legal:
+        idx = move_index(mv)
+        counts[idx] = counts.get(idx, 0) + 1
+    return {map_move(mv, mirrored): float(p[move_index(mv)] / counts[move_index(mv)])
+            for mv in legal}
